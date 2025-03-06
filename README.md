@@ -2,4 +2,4 @@
 
 
 ## Multi-agent Architecture
-![Multi-agent supervisor architecture](images/graph.png "Built with Langgraph")
+![Multi-agent architecture](images/graph.png "Built with Langgraph")
