@@ -1,5 +1,6 @@
 from typing_extensions import Literal
 from pydantic import BaseModel
+import json
 import random
 # import re
 # import argparse
@@ -12,6 +13,8 @@ from langgraph.types import Command
 
 from langchain_google_vertexai import ChatVertexAI
 # from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
+
+from google.cloud import bigquery
 
 members = ["habits", "summaries", "alerts"]
 # options = members + ["FINISH"]
@@ -175,7 +178,7 @@ builder.add_node(summaries)
 builder.add_node(alerts)
 # note: there are no edges between nodes A, B and C!
 
-memory = MemorySaver() # keep memory for Streamlit, but thread_id is removed for simplicity
+memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
 
 
@@ -185,23 +188,50 @@ def process_messages(messages):
         if isinstance(message, AIMessage):
             if message.content not in ('habits', 'summaries', 'alerts'):
                 if isinstance(message.content, list):
-                    all_parts = ' '.join(map(str, message.content))
-                    st.markdown(f"**AI:** {all_parts}") # Use st.markdown for Streamlit
+                    all_parts = ' '.join(map(lambda part: str(part).strip(), message.content))
+                    st.markdown(f"**AI:** {all_parts}")
                 else:
-                    st.markdown(f"**AI:** {message.content}") # Use st.markdown for Streamlit
+                    st.markdown(f"**AI:** {message.content}")
+
+def get_patient_ids_from_bigquery():
+    """Fetches patient IDs from BigQuery."""
+    client = bigquery.Client()
+    query = "SELECT DISTINCT patient_id FROM `andrewcooley-genai-tests.ai_summit.patient_data` ORDER BY patient_id ASC"
+    query_job = client.query(query)
+    results = query_job.result()
+    patient_ids = [row.patient_id for row in results]
+    return patient_ids
+
+def get_patient_data_from_bigquery(patient_id):
+    """Fetches patient data from BigQuery based on patient ID."""
+    client = bigquery.Client()
+    query = f"SELECT * FROM `andrewcooley-genai-tests.ai_summit.patient_data` WHERE patient_id = {patient_id}"
+    query_job = client.query(query)
+    results = query_job.result()
+    patient_data_list = [dict(row.items()) for row in results]
+    patient_data = json.dumps(patient_data_list, indent=2, default=str)
+
+    return patient_data
 
 # Streamlit UI
 st.title("Healthcare AI Assistant")
 
-user_query_text = st.text_area("Enter your query:", placeholder="e.g., I need a workout plan", height=100)
-patient_data_text = st.text_area("Enter patient data (optional):", placeholder="e.g., Age: 30, BMI: 25", height=200)
+patient_ids = get_patient_ids_from_bigquery()
+selected_patient = st.sidebar.selectbox("Patient ID", patient_ids)
 
-if st.button("Run"):
-        full_user_input = f"<user_query>{user_query_text}</user_query> <patient_data>{patient_data_text}</patient_data>"
+user_query  = st.selectbox(
+    'What type of assistance do you need?',
+    ('I need a custom workout routine and meal plan.', 'Summarize complex medical information.', 'Analyze my personal health data for risks.')
+)
+patient_data = get_patient_data_from_bigquery(selected_patient)
+st.text_area("Patient Data", value=patient_data, height=400)
+
+if st.button("Get Support"):
+        full_user_input = f"<user_query>{user_query}</user_query> <patient_data>{patient_data}</patient_data>"
         message = {"messages": [HumanMessage(content=full_user_input)]}
         config = {"configurable": {"thread_id": random.randint(0, 1000)}}
 
-        st.markdown(f"**Human:** {user_query_text}") # Display human query in Streamlit
+        st.markdown(f"**Human:** {user_query}")
 
         for chunk in graph.stream(message, config, stream_mode="updates"):
             for key, value in chunk.items():

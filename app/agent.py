@@ -183,7 +183,7 @@ def process_messages(messages):
         if isinstance(message, AIMessage):
             if message.content not in ('habits', 'summaries', 'alerts'):
                 if isinstance(message.content, list):
-                    all_parts = ' '.join(map(str, message.content))
+                    all_parts = ' '.join(map(lambda part: str(part).strip(), message.content))
                     print(f"AI: {all_parts}") 
                 else:
                     print(f"AI: {message.content}") 
