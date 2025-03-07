@@ -224,7 +224,7 @@ patient_data = get_patient_data_from_bigquery(selected_patient)
 with st.expander("Detailed health records"):
     st.dataframe(patient_data)
 
-options = ('I need a custom workout routine and meal plan.', 'Summarize complex medical information.', 'Analyze my personal health data for risks.', 'Other')
+options = ('I need a custom workout routine and meal plan.', 'Summarize complex medical information.', 'Analyze my personal health data for risks.')
 
 user_query = st.selectbox(
     'What type of assistance do you need?',
