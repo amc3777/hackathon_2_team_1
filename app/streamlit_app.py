@@ -4,7 +4,7 @@ import json
 import random
 import pandas as pd
 import io
-# import re
+import re
 # import argparse
 import streamlit as st  # Import Streamlit
 
@@ -184,6 +184,13 @@ builder.add_node(alerts)
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
 
+def clean_llm_response(response):
+    """Cleans up the LLM response by removing extra colons and newlines."""
+
+    # Remove extra colons and leading/trailing whitespace
+    cleaned_response = re.sub(r':\s*(\n|$)', r'\1', response).strip()
+
+    return cleaned_response
 
 # Modified process_messages for Streamlit
 def process_messages(messages):
@@ -192,9 +199,9 @@ def process_messages(messages):
             if message.content not in ('habits', 'summaries', 'alerts'):
                 if isinstance(message.content, list):
                     all_parts = ' '.join(map(lambda part: str(part).strip(), message.content))
-                    st.markdown(f"**AI:** {all_parts}")
+                    st.markdown(f"**Assistant:** {clean_llm_response(all_parts)}")
                 else:
-                    st.markdown(f"**AI:** {message.content}")
+                    st.markdown(f"**Assistant:** {clean_llm_response(message.content)}")
 
 def get_patient_ids_from_bigquery():
     """Fetches patient IDs from BigQuery."""
@@ -264,7 +271,7 @@ else:
     user_query_to_use = user_query
 
 if st.button("Get Support"):
-    if uploaded_file:
+    if 'uploaded_file' in locals() and not uploaded_file is None:
         text_user_input = f"<user_query>{user_query_to_use}</user_query> <patient_data>{patient_data}</patient_data>"
         media_user_input = {
                     "type": "media",
@@ -278,7 +285,7 @@ if st.button("Get Support"):
         message = {"messages": [HumanMessage(content=full_user_input)]}
         config = {"configurable": {"thread_id": random.randint(0, 1000)}}
 
-    st.markdown(f"**Human:** {user_query_to_use}")
+    st.markdown(f"**Request:** {user_query_to_use}")
 
     for chunk in graph.stream(message, config, stream_mode="updates"):
         for key, value in chunk.items():
