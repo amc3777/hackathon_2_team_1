@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import json
 import random
 import pandas as pd
+import io
 # import re
 # import argparse
 import streamlit as st  # Import Streamlit
@@ -14,8 +15,9 @@ from langgraph.types import Command
 
 from langchain_google_vertexai import ChatVertexAI
 # from google.cloud.aiplatform_v1beta1.types import Tool as VertexTool
-
 from google.cloud import bigquery
+from google.cloud import storage
+
 
 members = ["habits", "summaries", "alerts"]
 # options = members + ["FINISH"]
@@ -215,43 +217,70 @@ def get_patient_data_from_bigquery(patient_id):
     return patient_data
 
 # Streamlit UI
-st.title("Healthcare AI Assistant")
+st.set_page_config(layout="wide")
+st.markdown("""<img src="https://1000logos.net/wp-content/uploads/2024/02/Gemini-Logo.png" alt="Google" width="120" height="68">""", unsafe_allow_html=True)
+st.header("Healthcare AI Assistant", divider="rainbow")
+
 
 patient_ids = get_patient_ids_from_bigquery()
-selected_patient = st.selectbox("Patient ID", patient_ids)
+selected_patient = st.selectbox("Patient ID: ", patient_ids)
 
 patient_data = get_patient_data_from_bigquery(selected_patient)
-with st.expander("Expand for detailed health records"):
+with st.expander("Expand for detailed health records."):
     st.dataframe(patient_data)
 
 options = ('I need a custom workout routine and meal plan.', 'Summarize complex medical information.', 'Analyze my personal health data for risks.')
 
 user_query = st.selectbox(
-    'What type of assistance do you need?',
+    'What type of assistance do you need? To upload documents, please select "Summarize complex medical information."',
     options
 )
 
+BUCKET_NAME = "uploaded-health-docs"
+PROJECT_ID = "andrewcooley-genai-tests"
+
+def upload_to_gcs(file_obj, file_name):
+    """Uploads a file object to Google Cloud Storage."""
+
+    storage_client = storage.Client(project=PROJECT_ID)
+    bucket = storage_client.bucket(BUCKET_NAME)
+    blob = bucket.blob(file_name)
+
+    try:
+        blob.upload_from_file(file_obj)
+        st.success(f"File '{file_name}' uploaded successfully!")
+    except Exception as e:
+        st.error(f"Error uploading file: {e}")
+
 if user_query == 'Summarize complex medical information.':
     custom_query = st.text_area("Please specify your request:", placeholder="e.g., Explain my latest blood test results...", height=100)
-    uploaded_files = st.file_uploader("Upload JPEG or PDF files", type=["jpg", "jpeg", "pdf"], accept_multiple_files=True)
-    for uploaded_file in uploaded_files:
-        bytes_data = uploaded_file.read()
-        st.write("filename:", uploaded_file.name)
+    uploaded_file = st.file_uploader("Upload JPEG, PNG, PDF, or TXT files", type=["jpg", "jpeg", "png", "pdf", "txt"], accept_multiple_files=False)
+    if uploaded_file:     
+        file_obj = io.BytesIO(uploaded_file.getvalue())
+        if st.button(f"Upload {uploaded_file.name}?"):
+            upload_to_gcs(file_obj, uploaded_file.name)
     user_query_to_use = user_query + "\n\n" + custom_query
 else:
     user_query_to_use = user_query
 
 if st.button("Get Support"):
-    if not user_query_to_use:
-        st.warning("Please enter a user query.")
+    if uploaded_file:
+        text_user_input = f"<user_query>{user_query_to_use}</user_query> <patient_data>{patient_data}</patient_data>"
+        media_user_input = {
+                    "type": "media",
+                    "file_uri": f"gs://{BUCKET_NAME}/{uploaded_file.name}",
+                    "mime_type": f"{uploaded_file.type}",
+                }
+        message = {"messages": [HumanMessage([text_user_input, media_user_input])]}
+        config = {"configurable": {"thread_id": random.randint(0, 1000)}}
     else:
         full_user_input = f"<user_query>{user_query_to_use}</user_query> <patient_data>{patient_data}</patient_data>"
         message = {"messages": [HumanMessage(content=full_user_input)]}
         config = {"configurable": {"thread_id": random.randint(0, 1000)}}
 
-        st.markdown(f"**Human:** {user_query_to_use}")
+    st.markdown(f"**Human:** {user_query_to_use}")
 
-        for chunk in graph.stream(message, config, stream_mode="updates"):
-            for key, value in chunk.items():
-                messages = value['messages']
-                process_messages(messages)
+    for chunk in graph.stream(message, config, stream_mode="updates"):
+        for key, value in chunk.items():
+            messages = value['messages']
+            process_messages(messages)

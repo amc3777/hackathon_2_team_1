@@ -8,4 +8,5 @@ pandas
 google-cloud-bigquery
 google-cloud-bigquery[pandas]
 google-cloud-bigquery-storage
+google-cloud-storage
 google-cloud-aiplatform
