@@ -2,6 +2,7 @@ from typing_extensions import Literal
 from pydantic import BaseModel
 import json
 import random
+import pandas as pd
 # import re
 # import argparse
 import streamlit as st  # Import Streamlit
@@ -207,31 +208,44 @@ def get_patient_data_from_bigquery(patient_id):
     client = bigquery.Client()
     query = f"SELECT * FROM `andrewcooley-genai-tests.ai_summit.patient_data` WHERE patient_id = {patient_id}"
     query_job = client.query(query)
-    results = query_job.result()
-    patient_data_list = [dict(row.items()) for row in results]
-    patient_data = json.dumps(patient_data_list, indent=2, default=str)
-
+    # results = query_job.result()
+    # patient_data_list = [dict(row.items()) for row in results]
+    # patient_data = json.dumps(patient_data_list, indent=2, default=str)
+    patient_data = query_job.to_dataframe()
     return patient_data
 
 # Streamlit UI
 st.title("Healthcare AI Assistant")
 
 patient_ids = get_patient_ids_from_bigquery()
-selected_patient = st.sidebar.selectbox("Patient ID", patient_ids)
+selected_patient = st.selectbox("Patient ID", patient_ids)
 
-user_query  = st.selectbox(
-    'What type of assistance do you need?',
-    ('I need a custom workout routine and meal plan.', 'Summarize complex medical information.', 'Analyze my personal health data for risks.')
-)
 patient_data = get_patient_data_from_bigquery(selected_patient)
-st.text_area("Patient Data", value=patient_data, height=400)
+with st.expander("Detailed health records"):
+    st.dataframe(patient_data)
+
+options = ('I need a custom workout routine and meal plan.', 'Summarize complex medical information.', 'Analyze my personal health data for risks.', 'Other')
+
+user_query = st.selectbox(
+    'What type of assistance do you need?',
+    options
+)
+
+if user_query == 'Summarize complex medical information.':
+    custom_query = st.text_area("Please specify your request:", placeholder="e.g., Explain my latest blood test results...", height=100)
+    user_query_to_use = user_query + "\n\n" + custom_query
+else:
+    user_query_to_use = user_query
 
 if st.button("Get Support"):
-        full_user_input = f"<user_query>{user_query}</user_query> <patient_data>{patient_data}</patient_data>"
+    if not user_query_to_use:
+        st.warning("Please enter a user query.")
+    else:
+        full_user_input = f"<user_query>{user_query_to_use}</user_query> <patient_data>{patient_data}</patient_data>"
         message = {"messages": [HumanMessage(content=full_user_input)]}
         config = {"configurable": {"thread_id": random.randint(0, 1000)}}
 
-        st.markdown(f"**Human:** {user_query}")
+        st.markdown(f"**Human:** {user_query_to_use}")
 
         for chunk in graph.stream(message, config, stream_mode="updates"):
             for key, value in chunk.items():

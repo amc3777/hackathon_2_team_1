@@ -4,5 +4,8 @@ langgraph
 langchain-google-vertexai
 pydantic
 typing-extensions
+pandas
 google-cloud-bigquery
+google-cloud-bigquery[pandas]
+google-cloud-bigquery-storage
 google-cloud-aiplatform
