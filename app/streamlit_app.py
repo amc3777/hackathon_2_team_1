@@ -221,7 +221,7 @@ patient_ids = get_patient_ids_from_bigquery()
 selected_patient = st.selectbox("Patient ID", patient_ids)
 
 patient_data = get_patient_data_from_bigquery(selected_patient)
-with st.expander("Detailed health records"):
+with st.expander("Expand for detailed health records"):
     st.dataframe(patient_data)
 
 options = ('I need a custom workout routine and meal plan.', 'Summarize complex medical information.', 'Analyze my personal health data for risks.')
@@ -233,6 +233,10 @@ user_query = st.selectbox(
 
 if user_query == 'Summarize complex medical information.':
     custom_query = st.text_area("Please specify your request:", placeholder="e.g., Explain my latest blood test results...", height=100)
+    uploaded_files = st.file_uploader("Upload JPEG or PDF files", type=["jpg", "jpeg", "pdf"], accept_multiple_files=True)
+    for uploaded_file in uploaded_files:
+        bytes_data = uploaded_file.read()
+        st.write("filename:", uploaded_file.name)
     user_query_to_use = user_query + "\n\n" + custom_query
 else:
     user_query_to_use = user_query
